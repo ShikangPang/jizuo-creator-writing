@@ -1,0 +1,3 @@
+- insert:
+    - id: jizuo-writing
+      name: "@jizuo/writing-plugin"
