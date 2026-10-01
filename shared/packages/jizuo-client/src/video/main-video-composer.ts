@@ -64,6 +64,7 @@ export function createMainVideoComposer(remote: JizuoContentRemote, inputFor: (s
   const designLabels = new Map<string, string>();
   // Native attachment IDs survive failed submissions; imported assets can be reused on retry.
   const importedImages = new Map<string, string>();
+  const chatRequests = new Map<string, { fingerprint: string; requestId: string }>();
   const getSnapshot = (sessionId: string) => states.get(sessionId) ?? EMPTY;
   const hasContent = (sessionId: string) => {
     const input = inputFor(sessionId)?.state.getSnapshot();
@@ -184,19 +185,46 @@ export function createMainVideoComposer(remote: JizuoContentRemote, inputFor: (s
             const latest = getSnapshot(sessionId);
             if (JSON.stringify(latest.target) !== JSON.stringify(captured.target) || latest.connectionId !== captured.connectionId || latest.kind !== captured.kind) throw new Error("镜头或模型已切换，请重新提交");
           };
-          const { project, episode, shot, design, target } = await read(sessionId);
-          checkSelection();
-          if (target.editing) throw new Error("当前引用的是剪辑，请切换到对话讨论剪辑，或选择镜头后生成");
-          if (shot && episode && hasVideoShotDraft(target.workId, episode.id, shot.id)) throw new Error("镜头有未保存修改，请先保存或放弃修改");
           const kind = captured.kind === "image" ? "image" : "video";
-          if (design && kind !== "image") throw new Error("人物和场景设定用于图片生成，生成视频请先选择镜头");
           const settings = await remote.getMediaSettings?.();
           checkSelection();
           const connection = captured.connectionId ? settings?.connections?.find(item => item.id === captured.connectionId && item.kind === kind && item.keyConfigured) : undefined;
           if (captured.connectionId && !connection) throw new Error("所选模型已移除或凭据不可用，请重新选择模型");
           const config = connection?.config ?? settings?.settings[kind];
           if (remote.getMediaSettings && !config) throw new Error(`请先配置${kind === "image" ? "图片" : "视频"}模型`);
+          if (settings && !connection && !settings.keyConfigured[kind]) throw new Error(`当前${kind === "image" ? "图片" : "视频"}模型未配置凭据，请选择即作账号模型或在媒体模型设置中配置密钥`);
           const inputs = captured.inputs;
+          if (!captured.target && remote.submitChatMedia) {
+            if (snapshot.occurrences.length || inputs.referenceVideoAssetIds?.length || inputs.referenceAssetIds?.length) throw new Error("请先选择引用对应的镜头或设定；普通生图可直接添加图片附件");
+            const prompt = snapshot.draft.trim();
+            if (!prompt) throw new Error("请填写图片或视频的生成要求");
+            const generation: import("@jizuo/contracts").ChatMediaInput = { kind, prompt, ...(captured.connectionId ? {connectionId: captured.connectionId} : {}),
+              ...(inputs.aspectRatio ? {aspectRatio: inputs.aspectRatio} : {}),
+              ...(inputs.generationSettings ? {generationSettings: inputs.generationSettings} : {}),
+              ...(kind === "video" && inputs.durationSeconds !== undefined ? {durationSeconds: inputs.durationSeconds} : {}) };
+            const fingerprint = JSON.stringify([generation, nativeIds]);
+            let request = chatRequests.get(sessionId);
+            if (!request || request.fingerprint !== fingerprint) {
+              request = {fingerprint, requestId: crypto.randomUUID()}; chatRequests.set(sessionId, request);
+            }
+            checkSelection();
+            const projects = await remote.submitChatMedia({sessionId, requestId: request.requestId, generation,
+              images: attachments.map((image, i) => ({id: nativeIds[i]!, mimeType: image.mediaType as "image/png" | "image/jpeg" | "image/webp", base64: image.data}))}, signal);
+            chatRequests.delete(sessionId);
+            for (const project of projects) {
+              if (imageChat) {
+                const id = imageChat.start(sessionId, project.workId, {kind, prompt, ...(config ? {model: config.model} : {})});
+                imageChat.accepted(sessionId, id, project);
+              }
+              publishVideoProject(project);
+            }
+            return {kind: "success", text: kind === "image" ? "图片任务已提交" : "视频任务已提交"};
+          }
+          const { project, episode, shot, design, target } = await read(sessionId);
+          checkSelection();
+          if (target.editing) throw new Error("当前引用的是剪辑，请切换到对话讨论剪辑，或选择镜头后生成");
+          if (shot && episode && hasVideoShotDraft(target.workId, episode.id, shot.id)) throw new Error("镜头有未保存修改，请先保存或放弃修改");
+          if (design && kind !== "image") throw new Error("人物和场景设定用于图片生成，生成视频请先选择镜头");
           const hasShotReference = snapshot.occurrences.some(item => item.source === SHOT_CHAT_SOURCE);
           const hasPromptReference = hasShotReference || snapshot.occurrences.some(item => item.source === DESIGN_CHAT_SOURCE);
           // Explicit media choices remain editable; otherwise a live reference follows the saved subject.

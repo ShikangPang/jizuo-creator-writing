@@ -116,3 +116,5 @@
 .jz-composer-asset-picker .jz-composer-upload-button:focus-visible{outline:2px solid var(--dsw-focus-ring-color,#4d6bfe);outline-offset:2px}
 .jz-composer-upload>small,.jz-composer-picker-empty{color:var(--dsw-alias-label-tertiary,#858b93);font-size:11px;line-height:1.6}
 .jz-composer-picker-empty{display:block;padding:8px 0}
+.jz-native-media-history{max-height:min(42vh,360px);overflow:auto;overscroll-behavior:contain;width:100%;min-width:0}
+.jz-native-media-history:not(:has(.jz-chat-image-conversation)){display:none}

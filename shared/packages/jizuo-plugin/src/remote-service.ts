@@ -70,6 +70,20 @@ export interface WorkflowRemotePort {
 }
 
 export class JizuoRemoteService extends TypertRemoteService {
+  async submitChatMedia(request: import("@jizuo/contracts").SubmitChatMediaInput, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const id = SessionId(request.sessionId);
+    const live = (this.ctx as unknown as { sessions?: Pick<SessionStore, "get"> }).sessions?.get(id);
+    const persistence = this.ctx.get("sessionPersistence") as { stat?: (id: Session["id"]) => Promise<{ header: Session["header"] } | undefined> } | undefined;
+    const header = live?.header ?? (await persistence?.stat?.(id))?.header;
+    if (!header || header.id !== id || header.origin === "subagent") throw new JizuoError("denied", "当前聊天不存在或不可访问");
+    const media = this.domain.chatMedia;
+    if (!media) throw new JizuoError("runtime_unavailable", "聊天媒体服务尚未连接");
+    await media.generate({sessionId: id, callId: `composer:${request.requestId}`, ...(header.cwd ? {cwd: header.cwd} : {})},
+      {...request.generation, referenceAttachmentIds: request.images.map(image => image.id)},
+      request.images.map(image => ({id: image.id, mimeType: image.mimeType, read: async () => Buffer.from(image.base64, "base64")})), signal);
+    return media.list(id);
+  }
   async checkVideoRuntime(_request: Record<string, never>, signal: AbortSignal) { return checkVideoRuntime(signal); }
   async getChatMedia(request:{sessionId:string},signal:AbortSignal) {
     signal.throwIfAborted();

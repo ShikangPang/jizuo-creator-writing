@@ -42,6 +42,7 @@ export interface JizuoContentRemote extends VideoProductionRemote {
   getVideoProject?(input: GetVideoProjectInput, signal?: AbortSignal): Promise<VideoProject>;
   getVideoProjectView?(input: GetVideoProjectViewInput, signal?: AbortSignal): Promise<VideoProjectView>;
   getChatMedia?(input:{sessionId:string},signal?:AbortSignal):Promise<import("@jizuo/contracts").VideoProject[]>;
+  submitChatMedia?(input:import("@jizuo/contracts").SubmitChatMediaInput,signal?:AbortSignal):Promise<import("@jizuo/contracts").VideoProject[]>;
   getVideoJobUpdates?(input: GetVideoJobUpdatesInput, signal?: AbortSignal): Promise<VideoJobUpdates>;
   createVideoEpisode?(input: CreateVideoEpisodeInput): Promise<VideoProject>;
   deleteVideoEpisode?(input: DeleteVideoEpisodeInput): Promise<VideoProject>;

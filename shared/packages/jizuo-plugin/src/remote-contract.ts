@@ -1,5 +1,5 @@
 import { VideoRuntimeStatus } from "@jizuo/contracts";
-import { ChatMediaSessionInput } from "@jizuo/contracts";
+import { ChatMediaSessionInput, SubmitChatMediaInput } from "@jizuo/contracts";
 import { GetVideoClipFramesInput, VideoClipFrames } from "@jizuo/contracts";
 import { GetVideoProjectViewInput, VideoProjectView, GetVideoJobUpdatesInput, VideoJobUpdates } from "@jizuo/contracts";
 import { SaveWorkVisualStyleInput, SaveStyledPromptsInput, UndoStyledPromptsInput } from "../../contracts/src/visual-style.ts";
@@ -293,6 +293,7 @@ export const JIZUO_INVOCATIONS: readonly InvocationDescriptor[] = [
   invocation("getVideoProject", GetVideoProjectInput, VideoProject),
   invocation("getVideoProjectView", GetVideoProjectViewInput, VideoProjectView),
   invocation("getChatMedia", ChatMediaSessionInput, z.array(VideoProject)),
+  invocation("submitChatMedia", SubmitChatMediaInput, z.array(VideoProject)),
   invocation("getVideoJobUpdates", GetVideoJobUpdatesInput, VideoJobUpdates),
   invocation("createVideoEpisode", CreateVideoEpisodeInput, VideoProject),
   invocation("deleteVideoEpisode", DeleteVideoEpisodeInput, VideoProject),

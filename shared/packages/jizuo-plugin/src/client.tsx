@@ -17,6 +17,7 @@ import { storyboardChatMessage, type StoryboardChatRequest } from "../../jizuo-c
 import { IconButton } from "../../jizuo-client/src/ui/IconButton.tsx";
 import { registerLocalDirectoryQuery } from "./local-directory.ts";
 import { bridgeComposerTextModelBlock } from "./composer-model-block.ts";
+import { bindNativeMediaSubmit } from "./native-media-submit.ts";
 import { composerDetectSpan } from "./composer-input-span.ts";
 import { ComposerWorkImageDrop, createWorkImageIntake } from "./composer-work-image-drop.tsx";
 import { bindImageChatActivity } from "./image-chat-runtime.ts";
@@ -150,6 +151,7 @@ interface RemoteAnswer<T> {
 
 export interface JizuoHostRemote extends AccountHostRemote {
   getChatMedia?(request:{sessionId:string},signal?:AbortSignal):Promise<RemoteAnswer<import("@jizuo/contracts").VideoProject[]>>;
+  submitChatMedia?(request:import("@jizuo/contracts").SubmitChatMediaInput,signal?:AbortSignal):Promise<RemoteAnswer<import("@jizuo/contracts").VideoProject[]>>;
   getMediaLibrary(request: Record<string, never>): Promise<RemoteAnswer<import("@jizuo/contracts").MediaLibraryView>>;
   saveMediaProvider(request: import("@jizuo/contracts").SaveMediaProviderInput): Promise<RemoteAnswer<import("@jizuo/contracts").MediaLibraryView>>;
   setDefaultMediaModels(request: import("@jizuo/contracts").SetDefaultMediaModelsInput): Promise<RemoteAnswer<import("@jizuo/contracts").MediaLibraryView>>;
@@ -389,6 +391,7 @@ function invokeWithSignal<TRequest, TResult>(
 export function jizuoRemote(remote: JizuoHostRemote): JizuoContentRemote & MemoryPalaceOverlayRemote & JizuoWorkflowRemote & WorkLocationsRemote & MediaSettingsRemote & MediaLibraryRemote & SpeechSettingsRemote {
   return {
     ...(remote.getChatMedia ? {getChatMedia: async (input:{sessionId:string},signal?:AbortSignal) => unwrap(await remote.getChatMedia!(input,signal),"聊天媒体记录读取失败")} : {}),
+    ...(remote.submitChatMedia ? {submitChatMedia: async (input:import("@jizuo/contracts").SubmitChatMediaInput,signal?:AbortSignal) => unwrap(await remote.submitChatMedia!(input,signal),"媒体提交结果尚未确认，请先查看生成记录")} : {}),
     getMediaLibrary: async () => unwrap(await remote.getMediaLibrary({}), "模型目录加载失败"),
     saveMediaProvider: async (input) => unwrap(await remote.saveMediaProvider(input), "服务商保存失败"),
     setDefaultMediaModels: async (input) => unwrap(await remote.setDefaultMediaModels(input), "默认模型保存失败"),
@@ -1058,14 +1061,22 @@ export async function apply(ctx: Context, options: ClientOptions = {}): Promise<
     inject: (name, install) => registerForCreationExtension("media-models", () => (ctx.slots as unknown as NativeShellSlots).inject(name, install)),
     register: (registration, component) => (ctx.slots as unknown as NativeShellSlots).register(registration, component),
   } : ctx.slots as unknown as NativeShellSlots;
-  const stopImageChat = videoSlots.inject("conversation.chat.media", () =>
-    (ctx.slots as unknown as NativeShellSlots).register({ name: "conversation.chat.media", id: "jizuo-image-generation-history", order: 0,
+  const mediaHistorySlot = options.hostUi === "native" ? "conversation.composer.dock" : "conversation.chat.media";
+  const stopImageChat = videoSlots.inject(mediaHistorySlot, () =>
+    (ctx.slots as unknown as NativeShellSlots).register({ name: mediaHistorySlot, id: "jizuo-image-generation-history", order: 0,
       inject: () => ({ remote, store: imageChat }),
-    }, ChatImageConversation));
+    }, options.hostUi === "native" ? (props: Parameters<typeof ChatImageConversation>[0]) => <div className="jz-native-media-history"><ChatImageConversation {...props} /></div> : ChatImageConversation));
+  const nativeMediaInputs = new WeakSet<object>();
   const videoComposer = createMainVideoComposer(remote, sessionId => {
     const binding = ctx.sessions.binding(sessionId as Parameters<typeof ctx.sessions.binding>[0]);
     if (!binding) return undefined;
     const input = ctx.conversation.input.for(binding.ctx);
+    if (options.hostUi === "native" && !nativeMediaInputs.has(input)) {
+      nativeMediaInputs.add(input);
+      const stop = bindNativeMediaSubmit(input, () => creationExtensionEnabled("media-models") ? videoComposer.submissionRoute(sessionId) : undefined);
+      binding.ctx.effect(() => stop);
+      ctx.effect(() => stop);
+    }
     return {
       state: input.state,
       setDraft: (text) => input.setDraft(text),

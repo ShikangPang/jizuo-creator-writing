@@ -97,7 +97,13 @@ export function ComposerModelTypeControl({ sessionId, composer, remote, inputSto
     const candidates = connections.filter(item => item.kind === kind && item.keyConfigured);
     change(kind, (candidates.find(item => item.isDefault) ?? candidates[0])?.id);
   };
-  const open = (next: Menu) => { setMenu(menu === next ? null : next); setQuery(""); setError(""); };
+  const open = (next: Menu) => {
+    // The account plugin can activate or finish login after this shared catalog
+    // was first loaded. Reopen against current credentials instead of retaining
+    // the startup snapshot for the lifetime of the app.
+    if (next === "model" && menu !== next) media.refresh();
+    setMenu(menu === next ? null : next); setQuery(""); setError("");
+  };
   const navigateTypes = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = Array.from(popup.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []);
     const index = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -126,6 +132,7 @@ export function ComposerModelTypeControl({ sessionId, composer, remote, inputSto
           {media.loading && <p role="status">正在读取生成模型…</p>}
           {!media.loading && !choices.length && <p>{query ? "没有匹配的模型" : `暂无${labels[selected.kind]}模型，请前往设置中的模型页面添加。`}</p>}
           {media.error && <p role="alert">{<ErrorText error={media.error} operation="ComposerModelTypeControl" />}</p>}
+          {media.view?.hostedNotice && <p role="status">{media.view.hostedNotice}</p>}
         </div>
         <div className="jz-composer-type-footer"><small>仅用于当前对话</small><IconButton icon="reset" label={"刷新"} type="button" disabled={media.loading} onClick={media.refresh} /></div>
       </>}
