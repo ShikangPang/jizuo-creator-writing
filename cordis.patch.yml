@@ -1,3 +1,8 @@
 - insert:
+    - id: jizuo-writing-core
+      name: "@jizuo/plugin"
+      config:
+        hostUi: native
+        chapterWorkflowEnabled: false
     - id: jizuo-writing
       name: "@jizuo/writing-plugin"
